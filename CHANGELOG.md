@@ -1,5 +1,8 @@
 ## v1.5 [unreleased]
 
+### New Plugins
+- [nginx_plus](./plugins/inputs/nginx_plus/README.md) - Thanks to @mplonka & @poblahblahblah
+
 ### Release Notes
 
 - In the `kinesis` output, use of the `partition_key` and
@@ -16,6 +19,12 @@
 - [#3191](https://github.com/influxdata/telegraf/pull/3191): TLS and MTLS enhancements to HTTPListener input plugin.
 - [#3213](https://github.com/influxdata/telegraf/pull/3213): Add polling method to logparser and tail inputs.
 - [#3211](https://github.com/influxdata/telegraf/pull/3211): Add timeout option for kubernetes input.
+- [#3224](https://github.com/influxdata/telegraf/pull/3224): Preserve url path prefix in influx output.
+- [#3234](https://github.com/influxdata/telegraf/pull/3234): Add support for timing sums in statsd input.
+- [#2617](https://github.com/influxdata/telegraf/issues/2617): Add resource limit monitoring to procstat.
+- [#3236](https://github.com/influxdata/telegraf/pull/3236): Add support for k8s service DNS discovery to prometheus input.
+- [#3245](https://github.com/influxdata/telegraf/pull/3245): Add configurable metrics endpoint to prometheus output.
+- [#3214](https://github.com/influxdata/telegraf/pull/3214): Add new nginx_plus input plugin.
 
 ### Bugfixes
 
@@ -27,6 +36,12 @@
 
 - [#3167](https://github.com/influxdata/telegraf/issues/3167): Fix MQTT input exits if Broker is not available on startup.
 - [#3217](https://github.com/influxdata/telegraf/issues/3217): Fix optional field value conversions in fluentd input.
+- [#3227](https://github.com/influxdata/telegraf/issues/3227): Whitelist allowed char classes for opentsdb output.
+- [#3232](https://github.com/influxdata/telegraf/issues/3232): Fix counter and gauge metric types.
+- [#3235](https://github.com/influxdata/telegraf/issues/3235): Fix skipped line with empty target in iptables.
+- [#3175](https://github.com/influxdata/telegraf/issues/3175): Fix duplicate keys in perf counters sqlserver query.
+- [#3230](https://github.com/influxdata/telegraf/issues/3230): Fix panic in statsd p100 calculation.
+- [#3242](https://github.com/influxdata/telegraf/issues/3242): Fix arm64 packages contain 32-bit executable.
 
 ## v1.4 [2017-09-05]
 
