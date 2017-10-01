@@ -3,6 +3,7 @@
 ### New Plugins
 - [nginx_plus](./plugins/inputs/nginx_plus/README.md) - Thanks to @mplonka & @poblahblahblah
 - [jolokia2](./plugins/inputs/jolokia2/README.md) - Thanks to @dylanmei
+- [wavefront](./plugins/inputswavefront/README.md) - Thanks to @puckpuck
 
 ### Release Notes
 
@@ -33,6 +34,8 @@
 - [#3215](https://github.com/influxdata/telegraf/pull/3215): Add support for NSQLookupd to nsq_consumer.
 - [#2278](https://github.com/influxdata/telegraf/pull/2278): Add redesigned Jolokia input plugin.
 - [#3106](https://github.com/influxdata/telegraf/pull/3106): Add configurable separator for metrics and fields in opentsdb output.
+- [#1692](https://github.com/influxdata/telegraf/pull/1692): Add support for the rollbar occurrence webhook event.
+- [#3160](https://github.com/influxdata/telegraf/pull/3160): Add Wavefront output plugin.
 
 ### Bugfixes
 
@@ -46,6 +49,7 @@
 - [#3259](https://github.com/influxdata/telegraf/issues/3259): Fix error if int larger than 32-bit in /proc/vmstat.
 - [#3265](https://github.com/influxdata/telegraf/issues/3265): Fix parsing of JSON with a UTF8 BOM in httpjson.
 - [#2887](https://github.com/influxdata/telegraf/issues/2887): Allow JSON data format to contain zero metrics.
+- [#3284](https://github.com/influxdata/telegraf/issues/3284): Fix format of connection_timeout in mqtt_consumer.
 
 ## v1.4.1 [2017-09-26]
 
