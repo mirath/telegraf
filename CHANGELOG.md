@@ -1,10 +1,11 @@
 ## v1.5 [unreleased]
 
 ### New Plugins
+- [basicstats](./plugins/aggregators/basicstats/README.md) - Thanks to @toni-moreno
 - [jolokia2](./plugins/inputs/jolokia2/README.md) - Thanks to @dylanmei
 - [nginx_plus](./plugins/inputs/nginx_plus/README.md) - Thanks to @mplonka & @poblahblahblah
 - [smart](./plugins/inputs/smart/README.md) - Thanks to @rickard-von-essen
-- [wavefront](./plugins/inputs/wavefront/README.md) - Thanks to @puckpuck
+- [wavefront](./plugins/outputs/wavefront/README.md) - Thanks to @puckpuck
 
 ### Release Notes
 
@@ -40,13 +41,23 @@
 - [#3141](https://github.com/influxdata/telegraf/pull/3141): Collect Docker Swarm service metrics in docker input plugin.
 - [#2449](https://github.com/influxdata/telegraf/pull/2449): Add smart input plugin for collecting S.M.A.R.T. data.
 - [#3269](https://github.com/influxdata/telegraf/pull/3269): Add cluster health level configuration to elasticsearch input.
+- [#3304](https://github.com/influxdata/telegraf/pull/3304): Add ability to limit node stats in elasticsearch input.
+- [#2167](https://github.com/influxdata/telegraf/pull/2167): Add new basicstats aggregator.
 
 ### Bugfixes
 
 - [#3136](https://github.com/influxdata/telegraf/issues/3136): Fix webhooks input address in use during reload.
 - [#3258](https://github.com/influxdata/telegraf/issues/3258): Unlock Statsd when stopping to prevent deadlock.
+- [#3319](https://github.com/influxdata/telegraf/issues/3319): Fix cloudwatch output requires unneeded permissions.
 
-## v1.4.2 [unreleased]
+## v1.4.3 [unreleased]
+
+### Bugfixes
+
+- [#3327](https://github.com/influxdata/telegraf/issues/3327): Fix container name filters in docker input.
+- [#3321](https://github.com/influxdata/telegraf/issues/3321): Fix snmpwalk address format in leofs input.
+
+## v1.4.2 [2017-10-10]
 
 ### Bugfixes
 
@@ -57,6 +68,8 @@
 - [#3081](https://github.com/influxdata/telegraf/issues/3081): Fix case sensitivity error in sqlserver input.
 - [#3297](https://github.com/influxdata/telegraf/issues/3297): Add support for proxy environment variables to http_response.
 - [#1588](https://github.com/influxdata/telegraf/issues/1588): Add support for standard proxy env vars in outputs.
+- [#3282](https://github.com/influxdata/telegraf/issues/3282): Fix panic in cpu input if number of cpus changes.
+- [#2854](https://github.com/influxdata/telegraf/issues/2854): Use chunked transfer encoding in InfluxDB output.
 
 ## v1.4.1 [2017-09-26]
 
