@@ -1,12 +1,16 @@
 package modbus
 
 import (
+	"fmt"
+	"strconv"
 	"testing"
+	"time"
 
-	m "github.com/goburrow/modbus"
-	"github.com/stretchr/testify/assert"
+	mb "github.com/grid-x/modbus"
+	"github.com/stretchr/testify/require"
 	"github.com/tbrandon/mbserver"
 
+	"github.com/influxdata/telegraf"
 	"github.com/influxdata/telegraf/testutil"
 )
 
@@ -77,43 +81,52 @@ func TestCoils(t *testing.T) {
 	}
 
 	serv := mbserver.NewServer()
-	err := serv.ListenTCP("localhost:1502")
+	require.NoError(t, serv.ListenTCP("localhost:1502"))
 	defer serv.Close()
-	assert.NoError(t, err)
 
-	handler := m.NewTCPClientHandler("localhost:1502")
-	err = handler.Connect()
-	assert.NoError(t, err)
+	handler := mb.NewTCPClientHandler("localhost:1502")
+	require.NoError(t, handler.Connect())
 	defer handler.Close()
-	client := m.NewClient(handler)
+	client := mb.NewClient(handler)
 
 	for _, ct := range coilTests {
 		t.Run(ct.name, func(t *testing.T) {
-			_, err = client.WriteMultipleCoils(ct.address, ct.quantity, ct.write)
-			assert.NoError(t, err)
+			_, err := client.WriteMultipleCoils(ct.address, ct.quantity, ct.write)
+			require.NoError(t, err)
 
 			modbus := Modbus{
 				Name:       "TestCoils",
 				Controller: "tcp://localhost:1502",
-				SlaveID:    1,
-				Coils: []fieldContainer{
-					{
-						Name:    ct.name,
-						Address: []uint16{ct.address},
-					},
+				Log:        testutil.Logger{},
+			}
+			modbus.SlaveID = 1
+			modbus.Coils = []fieldDefinition{
+				{
+					Name:    ct.name,
+					Address: []uint16{ct.address},
 				},
 			}
 
-			err = modbus.Init()
-			assert.NoError(t, err)
-			var acc testutil.Accumulator
-			err = modbus.Gather(&acc)
-			assert.NoError(t, err)
-			assert.NotEmpty(t, modbus.registers)
-
-			for _, coil := range modbus.registers {
-				assert.Equal(t, ct.read, coil.Fields[0].value)
+			expected := []telegraf.Metric{
+				testutil.MustMetric(
+					"modbus",
+					map[string]string{
+						"type":     cCoils,
+						"slave_id": strconv.Itoa(int(modbus.SlaveID)),
+						"name":     modbus.Name,
+					},
+					map[string]interface{}{ct.name: ct.read},
+					time.Unix(0, 0),
+				),
 			}
+
+			var acc testutil.Accumulator
+			require.NoError(t, modbus.Init())
+			require.NotEmpty(t, modbus.requests)
+			require.NoError(t, modbus.Gather(&acc))
+			acc.Wait(len(expected))
+
+			testutil.RequireMetricsEqual(t, expected, acc.GetTelegrafMetrics(), testutil.IgnoreTime())
 		})
 	}
 }
@@ -549,50 +562,395 @@ func TestHoldingRegisters(t *testing.T) {
 			write:     []byte{0xF6, 0x84, 0xF9, 0x45, 0xFE, 0xBC, 0xFF, 0xFF},
 			read:      uint64(18446742686322259968),
 		},
+		{
+			name:      "register214_to_register217_abcdefgh_float64_ieee",
+			address:   []uint16{214, 215, 216, 217},
+			quantity:  4,
+			byteOrder: "ABCDEFGH",
+			dataType:  "FLOAT64-IEEE",
+			scale:     1,
+			write:     []byte{0xBF, 0x9C, 0x6A, 0x40, 0xC3, 0x47, 0x8F, 0x55},
+			read:      float64(-0.02774907295123737),
+		},
+		{
+			name:      "register214_to_register217_abcdefgh_float64_ieee_scaled",
+			address:   []uint16{214, 215, 216, 217},
+			quantity:  4,
+			byteOrder: "ABCDEFGH",
+			dataType:  "FLOAT64-IEEE",
+			scale:     0.1,
+			write:     []byte{0xBF, 0x9C, 0x6A, 0x40, 0xC3, 0x47, 0x8F, 0x55},
+			read:      float64(-0.002774907295123737),
+		},
+		{
+			name:      "register218_to_register221_abcdefgh_float64_ieee_pos",
+			address:   []uint16{218, 219, 220, 221},
+			quantity:  4,
+			byteOrder: "ABCDEFGH",
+			dataType:  "FLOAT64-IEEE",
+			scale:     1,
+			write:     []byte{0x3F, 0x9C, 0x6A, 0x40, 0xC3, 0x47, 0x8F, 0x55},
+			read:      float64(0.02774907295123737),
+		},
+		{
+			name:      "register222_to_register225_hgfecdba_float64_ieee",
+			address:   []uint16{222, 223, 224, 225},
+			quantity:  4,
+			byteOrder: "HGFEDCBA",
+			dataType:  "FLOAT64-IEEE",
+			scale:     1,
+			write:     []byte{0x55, 0x8F, 0x47, 0xC3, 0x40, 0x6A, 0x9C, 0xBF},
+			read:      float64(-0.02774907295123737),
+		},
+		{
+			name:      "register226_to_register229_badcfehg_float64_ieee",
+			address:   []uint16{226, 227, 228, 229},
+			quantity:  4,
+			byteOrder: "BADCFEHG",
+			dataType:  "FLOAT64-IEEE",
+			scale:     1,
+			write:     []byte{0x9C, 0xBF, 0x40, 0x6A, 0x47, 0xC3, 0x55, 0x8F},
+			read:      float64(-0.02774907295123737),
+		},
+		{
+			name:      "register230_to_register233_ghefcdab_float64_ieee",
+			address:   []uint16{230, 231, 232, 233},
+			quantity:  4,
+			byteOrder: "GHEFCDAB",
+			dataType:  "FLOAT64-IEEE",
+			scale:     1,
+			write:     []byte{0x8F, 0x55, 0xC3, 0x47, 0x6A, 0x40, 0xBF, 0x9C},
+			read:      float64(-0.02774907295123737),
+		},
 	}
 
 	serv := mbserver.NewServer()
-	err := serv.ListenTCP("localhost:1502")
+	require.NoError(t, serv.ListenTCP("localhost:1502"))
 	defer serv.Close()
-	assert.NoError(t, err)
 
-	handler := m.NewTCPClientHandler("localhost:1502")
-	err = handler.Connect()
-	assert.NoError(t, err)
+	handler := mb.NewTCPClientHandler("localhost:1502")
+	require.NoError(t, handler.Connect())
 	defer handler.Close()
-	client := m.NewClient(handler)
+	client := mb.NewClient(handler)
 
 	for _, hrt := range holdingRegisterTests {
 		t.Run(hrt.name, func(t *testing.T) {
-			_, err = client.WriteMultipleRegisters(hrt.address[0], hrt.quantity, hrt.write)
-			assert.NoError(t, err)
+			_, err := client.WriteMultipleRegisters(hrt.address[0], hrt.quantity, hrt.write)
+			require.NoError(t, err)
 
 			modbus := Modbus{
 				Name:       "TestHoldingRegisters",
 				Controller: "tcp://localhost:1502",
-				SlaveID:    1,
-				HoldingRegisters: []fieldContainer{
-					{
-						Name:      hrt.name,
-						ByteOrder: hrt.byteOrder,
-						DataType:  hrt.dataType,
-						Scale:     hrt.scale,
-						Address:   hrt.address,
-					},
+				Log:        testutil.Logger{},
+			}
+			modbus.SlaveID = 1
+			modbus.HoldingRegisters = []fieldDefinition{
+				{
+					Name:      hrt.name,
+					ByteOrder: hrt.byteOrder,
+					DataType:  hrt.dataType,
+					Scale:     hrt.scale,
+					Address:   hrt.address,
 				},
 			}
 
-			err = modbus.Init()
-			assert.NoError(t, err)
-			var acc testutil.Accumulator
-			modbus.Gather(&acc)
-			assert.NotEmpty(t, modbus.registers)
-
-			for _, coil := range modbus.registers {
-				assert.Equal(t, hrt.read, coil.Fields[0].value)
+			expected := []telegraf.Metric{
+				testutil.MustMetric(
+					"modbus",
+					map[string]string{
+						"type":     cHoldingRegisters,
+						"slave_id": strconv.Itoa(int(modbus.SlaveID)),
+						"name":     modbus.Name,
+					},
+					map[string]interface{}{hrt.name: hrt.read},
+					time.Unix(0, 0),
+				),
 			}
+
+			var acc testutil.Accumulator
+			require.NoError(t, modbus.Init())
+			require.NotEmpty(t, modbus.requests)
+			require.NoError(t, modbus.Gather(&acc))
+			acc.Wait(len(expected))
+
+			testutil.RequireMetricsEqual(t, expected, acc.GetTelegrafMetrics(), testutil.IgnoreTime())
 		})
 	}
+}
+
+func TestReadMultipleCoilWithHole(t *testing.T) {
+	serv := mbserver.NewServer()
+	require.NoError(t, serv.ListenTCP("localhost:1502"))
+	defer serv.Close()
+
+	handler := mb.NewTCPClientHandler("localhost:1502")
+	require.NoError(t, handler.Connect())
+	defer handler.Close()
+	client := mb.NewClient(handler)
+
+	fcs := []fieldDefinition{}
+	expectedFields := make(map[string]interface{})
+	writeValue := uint16(0)
+	readValue := uint16(0)
+	for i := 0; i < 14; i++ {
+		fc := fieldDefinition{}
+		fc.Name = fmt.Sprintf("coil-%v", i)
+		fc.Address = []uint16{uint16(i)}
+		fcs = append(fcs, fc)
+
+		_, err := client.WriteSingleCoil(fc.Address[0], writeValue)
+		require.NoError(t, err)
+
+		expectedFields[fc.Name] = readValue
+		writeValue = 65280 - writeValue
+		readValue = 1 - readValue
+	}
+	for i := 15; i < 18; i++ {
+		fc := fieldDefinition{}
+		fc.Name = fmt.Sprintf("coil-%v", i)
+		fc.Address = []uint16{uint16(i)}
+		fcs = append(fcs, fc)
+
+		_, err := client.WriteSingleCoil(fc.Address[0], writeValue)
+		require.NoError(t, err)
+
+		expectedFields[fc.Name] = readValue
+		writeValue = 65280 - writeValue
+		readValue = 1 - readValue
+	}
+	for i := 24; i < 33; i++ {
+		fc := fieldDefinition{}
+		fc.Name = fmt.Sprintf("coil-%v", i)
+		fc.Address = []uint16{uint16(i)}
+		fcs = append(fcs, fc)
+
+		_, err := client.WriteSingleCoil(fc.Address[0], writeValue)
+		require.NoError(t, err)
+
+		expectedFields[fc.Name] = readValue
+		writeValue = 65280 - writeValue
+		readValue = 1 - readValue
+	}
+	require.Len(t, expectedFields, len(fcs))
+
+	modbus := Modbus{
+		Name:       "TestReadMultipleCoilWithHole",
+		Controller: "tcp://localhost:1502",
+		Log:        testutil.Logger{Name: "modbus:MultipleCoilWithHole"},
+	}
+	modbus.SlaveID = 1
+	modbus.Coils = fcs
+
+	expected := []telegraf.Metric{
+		testutil.MustMetric(
+			"modbus",
+			map[string]string{
+				"type":     cCoils,
+				"slave_id": strconv.Itoa(int(modbus.SlaveID)),
+				"name":     modbus.Name,
+			},
+			expectedFields,
+			time.Unix(0, 0),
+		),
+	}
+
+	var acc testutil.Accumulator
+	require.NoError(t, modbus.Init())
+	require.NotEmpty(t, modbus.requests)
+	require.NoError(t, modbus.Gather(&acc))
+	acc.Wait(len(expected))
+
+	testutil.RequireMetricsEqual(t, expected, acc.GetTelegrafMetrics(), testutil.IgnoreTime())
+}
+
+func TestReadMultipleCoilLimit(t *testing.T) {
+	serv := mbserver.NewServer()
+	require.NoError(t, serv.ListenTCP("localhost:1502"))
+	defer serv.Close()
+
+	handler := mb.NewTCPClientHandler("localhost:1502")
+	require.NoError(t, handler.Connect())
+	defer handler.Close()
+	client := mb.NewClient(handler)
+
+	fcs := []fieldDefinition{}
+	expectedFields := make(map[string]interface{})
+	writeValue := uint16(0)
+	readValue := uint16(0)
+	for i := 0; i < 4000; i++ {
+		fc := fieldDefinition{}
+		fc.Name = fmt.Sprintf("coil-%v", i)
+		fc.Address = []uint16{uint16(i)}
+		fcs = append(fcs, fc)
+
+		_, err := client.WriteSingleCoil(fc.Address[0], writeValue)
+		require.NoError(t, err)
+
+		expectedFields[fc.Name] = readValue
+		writeValue = 65280 - writeValue
+		readValue = 1 - readValue
+	}
+	require.Len(t, expectedFields, len(fcs))
+
+	modbus := Modbus{
+		Name:       "TestReadCoils",
+		Controller: "tcp://localhost:1502",
+		Log:        testutil.Logger{},
+	}
+	modbus.SlaveID = 1
+	modbus.Coils = fcs
+
+	expected := []telegraf.Metric{
+		testutil.MustMetric(
+			"modbus",
+			map[string]string{
+				"type":     cCoils,
+				"slave_id": strconv.Itoa(int(modbus.SlaveID)),
+				"name":     modbus.Name,
+			},
+			expectedFields,
+			time.Unix(0, 0),
+		),
+	}
+
+	var acc testutil.Accumulator
+	require.NoError(t, modbus.Init())
+	require.NotEmpty(t, modbus.requests)
+	require.NoError(t, modbus.Gather(&acc))
+	acc.Wait(len(expected))
+
+	testutil.RequireMetricsEqual(t, expected, acc.GetTelegrafMetrics(), testutil.IgnoreTime())
+}
+
+func TestReadMultipleHoldingRegisterWithHole(t *testing.T) {
+	serv := mbserver.NewServer()
+	require.NoError(t, serv.ListenTCP("localhost:1502"))
+	defer serv.Close()
+
+	handler := mb.NewTCPClientHandler("localhost:1502")
+	require.NoError(t, handler.Connect())
+	defer handler.Close()
+	client := mb.NewClient(handler)
+
+	fcs := []fieldDefinition{}
+	expectedFields := make(map[string]interface{})
+	for i := 0; i < 10; i++ {
+		fc := fieldDefinition{
+			Name:      fmt.Sprintf("HoldingRegister-%v", i),
+			ByteOrder: "AB",
+			DataType:  "INT16",
+			Scale:     1.0,
+			Address:   []uint16{uint16(i)},
+		}
+		fcs = append(fcs, fc)
+
+		_, err := client.WriteSingleRegister(fc.Address[0], uint16(i))
+		require.NoError(t, err)
+
+		expectedFields[fc.Name] = int64(i)
+	}
+	for i := 20; i < 30; i++ {
+		fc := fieldDefinition{
+			Name:      fmt.Sprintf("HoldingRegister-%v", i),
+			ByteOrder: "AB",
+			DataType:  "INT16",
+			Scale:     1.0,
+			Address:   []uint16{uint16(i)},
+		}
+		fcs = append(fcs, fc)
+
+		_, err := client.WriteSingleRegister(fc.Address[0], uint16(i))
+		require.NoError(t, err)
+
+		expectedFields[fc.Name] = int64(i)
+	}
+	require.Len(t, expectedFields, len(fcs))
+
+	modbus := Modbus{
+		Name:       "TestHoldingRegister",
+		Controller: "tcp://localhost:1502",
+		Log:        testutil.Logger{},
+	}
+	modbus.SlaveID = 1
+	modbus.HoldingRegisters = fcs
+
+	expected := []telegraf.Metric{
+		testutil.MustMetric(
+			"modbus",
+			map[string]string{
+				"type":     cHoldingRegisters,
+				"slave_id": strconv.Itoa(int(modbus.SlaveID)),
+				"name":     modbus.Name,
+			},
+			expectedFields,
+			time.Unix(0, 0),
+		),
+	}
+
+	var acc testutil.Accumulator
+	require.NoError(t, modbus.Init())
+	require.NotEmpty(t, modbus.requests)
+	require.NoError(t, modbus.Gather(&acc))
+	acc.Wait(len(expected))
+
+	testutil.RequireMetricsEqual(t, expected, acc.GetTelegrafMetrics(), testutil.IgnoreTime())
+}
+
+func TestReadMultipleHoldingRegisterLimit(t *testing.T) {
+	serv := mbserver.NewServer()
+	require.NoError(t, serv.ListenTCP("localhost:1502"))
+	defer serv.Close()
+
+	handler := mb.NewTCPClientHandler("localhost:1502")
+	require.NoError(t, handler.Connect())
+	defer handler.Close()
+	client := mb.NewClient(handler)
+
+	fcs := []fieldDefinition{}
+	expectedFields := make(map[string]interface{})
+	for i := 0; i <= 400; i++ {
+		fc := fieldDefinition{}
+		fc.Name = fmt.Sprintf("HoldingRegister-%v", i)
+		fc.ByteOrder = "AB"
+		fc.DataType = "INT16"
+		fc.Scale = 1.0
+		fc.Address = []uint16{uint16(i)}
+		fcs = append(fcs, fc)
+
+		_, err := client.WriteSingleRegister(fc.Address[0], uint16(i))
+		require.NoError(t, err)
+
+		expectedFields[fc.Name] = int64(i)
+	}
+
+	modbus := Modbus{
+		Name:       "TestHoldingRegister",
+		Controller: "tcp://localhost:1502",
+		Log:        testutil.Logger{},
+	}
+	modbus.SlaveID = 1
+	modbus.HoldingRegisters = fcs
+
+	expected := []telegraf.Metric{
+		testutil.MustMetric(
+			"modbus",
+			map[string]string{
+				"type":     cHoldingRegisters,
+				"slave_id": strconv.Itoa(int(modbus.SlaveID)),
+				"name":     modbus.Name,
+			},
+			expectedFields,
+			time.Unix(0, 0),
+		),
+	}
+
+	var acc testutil.Accumulator
+	require.NoError(t, modbus.Init())
+	require.NotEmpty(t, modbus.requests)
+	require.NoError(t, modbus.Gather(&acc))
+	acc.Wait(len(expected))
+
+	testutil.RequireMetricsEqual(t, expected, acc.GetTelegrafMetrics(), testutil.IgnoreTime())
 }
 
 func TestRetrySuccessful(t *testing.T) {
@@ -601,8 +959,7 @@ func TestRetrySuccessful(t *testing.T) {
 	value := 1
 
 	serv := mbserver.NewServer()
-	err := serv.ListenTCP("localhost:1502")
-	assert.NoError(t, err)
+	require.NoError(t, serv.ListenTCP("localhost:1502"))
 	defer serv.Close()
 
 	// Make read on coil-registers fail for some trials by making the device
@@ -617,44 +974,52 @@ func TestRetrySuccessful(t *testing.T) {
 			if retries >= maxretries {
 				except = &mbserver.Success
 			}
-			retries += 1
+			retries++
 
 			return data, except
 		})
 
-	t.Run("retry_success", func(t *testing.T) {
-		modbus := Modbus{
-			Name:       "TestRetry",
-			Controller: "tcp://localhost:1502",
-			SlaveID:    1,
-			Retries:    maxretries,
-			Coils: []fieldContainer{
-				{
-					Name:    "retry_success",
-					Address: []uint16{0},
-				},
+	modbus := Modbus{
+		Name:       "TestRetry",
+		Controller: "tcp://localhost:1502",
+		Retries:    maxretries,
+		Log:        testutil.Logger{},
+	}
+	modbus.SlaveID = 1
+	modbus.Coils = []fieldDefinition{
+		{
+			Name:    "retry_success",
+			Address: []uint16{0},
+		},
+	}
+
+	expected := []telegraf.Metric{
+		testutil.MustMetric(
+			"modbus",
+			map[string]string{
+				"type":     cCoils,
+				"slave_id": strconv.Itoa(int(modbus.SlaveID)),
+				"name":     modbus.Name,
 			},
-		}
+			map[string]interface{}{"retry_success": uint16(value)},
+			time.Unix(0, 0),
+		),
+	}
 
-		err = modbus.Init()
-		assert.NoError(t, err)
-		var acc testutil.Accumulator
-		err = modbus.Gather(&acc)
-		assert.NoError(t, err)
-		assert.NotEmpty(t, modbus.registers)
+	var acc testutil.Accumulator
+	require.NoError(t, modbus.Init())
+	require.NotEmpty(t, modbus.requests)
+	require.NoError(t, modbus.Gather(&acc))
+	acc.Wait(len(expected))
 
-		for _, coil := range modbus.registers {
-			assert.Equal(t, uint16(value), coil.Fields[0].value)
-		}
-	})
+	testutil.RequireMetricsEqual(t, expected, acc.GetTelegrafMetrics(), testutil.IgnoreTime())
 }
 
-func TestRetryFail(t *testing.T) {
+func TestRetryFailExhausted(t *testing.T) {
 	maxretries := 2
 
 	serv := mbserver.NewServer()
-	err := serv.ListenTCP("localhost:1502")
-	assert.NoError(t, err)
+	require.NoError(t, serv.ListenTCP("localhost:1502"))
 	defer serv.Close()
 
 	// Make the read on coils fail with busy
@@ -667,32 +1032,41 @@ func TestRetryFail(t *testing.T) {
 			return data, &mbserver.SlaveDeviceBusy
 		})
 
-	t.Run("retry_fail", func(t *testing.T) {
-		modbus := Modbus{
-			Name:       "TestRetryFail",
-			Controller: "tcp://localhost:1502",
-			SlaveID:    1,
-			Retries:    maxretries,
-			Coils: []fieldContainer{
-				{
-					Name:    "retry_fail",
-					Address: []uint16{0},
-				},
-			},
-		}
+	modbus := Modbus{
+		Name:       "TestRetryFailExhausted",
+		Controller: "tcp://localhost:1502",
+		Retries:    maxretries,
+		Log:        testutil.Logger{},
+	}
+	modbus.SlaveID = 1
+	modbus.Coils = []fieldDefinition{
+		{
+			Name:    "retry_fail",
+			Address: []uint16{0},
+		},
+	}
 
-		err = modbus.Init()
-		assert.NoError(t, err)
-		var acc testutil.Accumulator
-		err = modbus.Gather(&acc)
-		assert.Error(t, err)
-	})
+	var acc testutil.Accumulator
+	require.NoError(t, modbus.Init())
+	require.NotEmpty(t, modbus.requests)
+
+	err := modbus.Gather(&acc)
+	require.Error(t, err)
+	require.Equal(t, "modbus: exception '6' (server device busy), function '129'", err.Error())
+}
+
+func TestRetryFailIllegal(t *testing.T) {
+	maxretries := 2
+
+	serv := mbserver.NewServer()
+	require.NoError(t, serv.ListenTCP("localhost:1502"))
+	defer serv.Close()
 
 	// Make the read on coils fail with illegal function preventing retry
 	counter := 0
 	serv.RegisterFunctionHandler(1,
 		func(s *mbserver.Server, frame mbserver.Framer) ([]byte, *mbserver.Exception) {
-			counter += 1
+			counter++
 			data := make([]byte, 2)
 			data[0] = byte(1)
 			data[1] = byte(0)
@@ -700,25 +1074,26 @@ func TestRetryFail(t *testing.T) {
 			return data, &mbserver.IllegalFunction
 		})
 
-	t.Run("retry_fail", func(t *testing.T) {
-		modbus := Modbus{
-			Name:       "TestRetryFail",
-			Controller: "tcp://localhost:1502",
-			SlaveID:    1,
-			Retries:    maxretries,
-			Coils: []fieldContainer{
-				{
-					Name:    "retry_fail",
-					Address: []uint16{0},
-				},
-			},
-		}
+	modbus := Modbus{
+		Name:       "TestRetryFailExhausted",
+		Controller: "tcp://localhost:1502",
+		Retries:    maxretries,
+		Log:        testutil.Logger{},
+	}
+	modbus.SlaveID = 1
+	modbus.Coils = []fieldDefinition{
+		{
+			Name:    "retry_fail",
+			Address: []uint16{0},
+		},
+	}
 
-		err = modbus.Init()
-		assert.NoError(t, err)
-		var acc testutil.Accumulator
-		err = modbus.Gather(&acc)
-		assert.Error(t, err)
-		assert.Equal(t, counter, 1)
-	})
+	var acc testutil.Accumulator
+	require.NoError(t, modbus.Init())
+	require.NotEmpty(t, modbus.requests)
+
+	err := modbus.Gather(&acc)
+	require.Error(t, err)
+	require.Equal(t, "modbus: exception '1' (illegal function), function '129'", err.Error())
+	require.Equal(t, counter, 1)
 }
